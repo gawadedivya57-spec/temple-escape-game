@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temple Escape: Collapse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Rajdhani:wght@600;700&display=swap');
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #05020a;
+            font-family: 'Rajdhani', sans-serif;
+            user-select: none;
+        }
+
+        .font-cinzel {
+            font-family: 'Cinzel', serif;
+        }
+
+        #game-canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        /* Custom glow effects */
+        .glow-orange {
+            text-shadow: 0 0 15px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.6);
+        }
+
+        .glow-blue {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+        }
+
+        .glow-red {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+        }
+
+        /* Screen shake animation */
+        .shake {
+            animation: shakeAnim 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shakeAnim {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden">
+
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Overlay HUD UI -->
+    <div id="hud" class="absolute inset-0 pointer-events-none hidden flex flex-col justify-between p-4 md:p-6">
+        <!-- Top Stats Bar -->
+        <div class="flex justify-between items-start w-full max-w-5xl mx-auto">
+            <!-- Aariv Stats -->
+            <div class="bg-slate-900/80 backdrop-blur-md border border-blue-500/50 rounded-xl p-3 w-40 md:w-56 glow-blue">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-blue-400 font-bold text-lg tracking-wider">AARIV (P1)</span>
+                    <span id="aariv-hp-text" class="text-xs text-white font-mono">100%</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-blue-900">
+                    <div id="aariv-hp-bar" class="bg-gradient-to-r from-blue-600 to-cyan-400 h-full w-full transition-all duration-200"></div>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                    <span>WASD: Move</span>
+                    <span>SPACE: Jump</span>
+                </div>
+            </div>
+
+            <!-- Progress Tracker -->
+            <div class="flex flex-col items-center bg-slate-900/80 backdrop-blur-md border border-amber-500/40 rounded-xl p-3 min-w-[160px] text-center">
+                <span class="text-amber-400 text-xs font-bold tracking-widest uppercase mb-1">Escape Distance</span>
+                <div class="text-2xl md:text-3xl font-black text-amber-200 font-cinzel">
+                    <span id="distance-val">0</span>m / <span id="target-dist-val">500</span>m
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-2 mt-2 overflow-hidden border border-amber-900">
+                    <div id="progress-bar" class="bg-gradient-to-r from-amber-500 to-orange-500 h-full w-0 transition-all duration-100"></div>
+                </div>
+            </div>
+
+            <!-- Lipika Stats -->
+            <div class="bg-slate-900/80 backdrop-blur-md border border-red-500/50 rounded-xl p-3 w-40 md:w-56 glow-red">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-red-400 font-bold text-lg tracking-wider">LIPIKA (P2)</span>
+                    <span id="lipika-hp-text" class="text-xs text-white font-mono">100%</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-red-900">
+                    <div id="lipika-hp-bar" class="bg-gradient-to-r from-red-600 to-amber-400 h-full w-full transition-all duration-200"></div>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                    <span>ARROWS: Move</span>
+                    <span>ENTER: Jump</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Warning Alert -->
+        <div id="alert-banner" class="self-center bg-red-600/90 text-white px-6 py-2 rounded-full font-bold tracking-widest text-sm uppercase opacity-0 transition-opacity duration-300 animate-pulse border border-yellow-400">
+            ⚠️ WARNING: TEMPLE IS COLLAPSING!
+        </div>
+    </div>
+
+    <!-- Start Screen Overlay -->
+    <div id="start-screen" class="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20">
+        <div class="max-w-3xl w-full flex flex-col items-center">
+            <h1 class="text-5xl md:text-7xl font-black font-cinzel text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-500 to-red-600 glow-orange mb-2">
+                TEMPLE ESCAPE
+            </h1>
+            <h2 class="text-xl md:text-2xl text-amber-200/80 font-bold tracking-widest mb-6 border-b border-amber-500/30 pb-2 w-full max-w-md">
+                COLLAPSE OF ANCIENT RUINS
+            </h2>
+
+            <p class="text-slate-300 text-sm md:text-base max-w-xl mb-8 leading-relaxed">
+                The ancient sun temple is collapsing! Guide <span class="text-blue-400 font-bold">Aariv</span> and <span class="text-red-400 font-bold">Lipika</span> through falling monoliths, crumbling floors, and lava traps to safely reach the exit portal!
+            </p>
+
+            <!-- Control Guide Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl mb-8">
+                <!-- P1 Card -->
+                <div class="bg-slate-900/90 border border-blue-500/40 rounded-xl p-4 text-left">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-4 h-4 rounded-full bg-blue-500"></div>
+                        <h3 class="text-blue-400 font-bold text-lg">AARIV (Player 1)</h3>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-1"><span class="text-white font-bold">WASD Keys</span> — Move</p>
+                    <p class="text-xs text-slate-400"><span class="text-white font-bold">SPACEBAR</span> — Jump</p>
+                </div>
+
+                <!-- P2 Card -->
+                <div class="bg-slate-900/90 border border-red-500/40 rounded-xl p-4 text-left">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-4 h-4 rounded-full bg-red-500"></div>
+                        <h3 class="text-red-400 font-bold text-lg">LIPIKA (Player 2)</h3>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-1"><span class="text-white font-bold">Arrow Keys</span> — Move</p>
+                    <p class="text-xs text-slate-400"><span class="text-white font-bold">RIGHT SHIFT / ENTER</span> — Jump</p>
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <button id="btn-start" class="pointer-events-auto bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xl px-10 py-4 rounded-full shadow-lg shadow-orange-500/30 transform hover:scale-105 transition-all duration-200 cursor-pointer">
+                ESCAPE TOGETHER
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen Overlay -->
+    <div id="game-over-screen" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 hidden">
+        <h2 id="game-over-title" class="text-5xl md:text-6xl font-black font-cinzel text-red-500 mb-2">
+            CRUSHED BY DEBRIS!
+        </h2>
+        <p id="game-over-desc" class="text-slate-300 text-lg mb-6 max-w-md">
+            The temple collapsed before you could escape.
+        </p>
+
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 mb-8 w-64">
+            <span class="text-slate-400 text-xs uppercase font-bold tracking-wider">Distance Covered</span>
+            <div id="final-distance" class="text-4xl font-black text-amber-400 font-cinzel">0m</div>
+        </div>
+
+        <button id="btn-restart" class="pointer-events-auto bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-lg px-8 py-3 rounded-full shadow-lg transform hover:scale-105 transition-all cursor-pointer">
+            TRY AGAIN
+        </button>
+    </div>
+
+    <!-- Victory Screen Overlay -->
+    <div id="victory-screen" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 hidden">
+        <h2 class="text-5xl md:text-6xl font-black font-cinzel text-amber-400 glow-orange mb-2">
+            ESCAPE SUCCESSFUL!
+        </h2>
+        <p class="text-slate-300 text-lg mb-6 max-w-md">
+            Aariv and Lipika escaped the ancient collapsing temple safely!
+        </p>
+
+        <button id="btn-victory-restart" class="pointer-events-auto bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-black text-lg px-8 py-3 rounded-full shadow-lg transform hover:scale-105 transition-all cursor-pointer">
+            PLAY AGAIN
+        </button>
+    </div>
+
+    <!-- Sound & Game Logic -->
+    <script>
+        /* --- SOUND SYNTHESIZER (Web Audio API - Lightweight & No Assets) --- */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playJump() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(450, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playImpact() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.25);
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.25);
+            }
+
+            playExplosion() {
+                if (!this.ctx) return;
+                // Low rumble noise synthesis
+                const bufferSize = this.ctx.sampleRate * 0.4;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(400, this.ctx.currentTime);
+                filter.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.4);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+
+            playVictory() {
+                if (!this.ctx) return;
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.1);
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime + idx * 0.1);
+                    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.1 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.1);
+                    osc.stop(this.ctx.currentTime + idx * 0.1 + 0.3);
+                });
+            }
+        }
+
+        const audio = new SoundFX();
+
+        /* --- GAME ENGINE SETUP --- */
+        const canvas = document.getElementById('game-canvas');
+        let scene, camera, renderer;
+        let isPlaying = false;
+        let isGameOver = false;
+
+        // Constants
+        const CORRIDOR_WIDTH = 14;
+        const ESCAPE_TARGET = 500; // Total length in meters
+        const BASE_FORWARD_SPEED = 0.22;
+
+        // State variables
+        let distanceCovered = 0;
+        let keyState = {};
+
+        // Game Entities
+        let aariv, lipika;
+        let templeSegments = [];
+        let activeObstacles = [];
+        let particles = [];
+        let shadowTargetIndicators = [];
+        let portalEntity = null;
+
+        // Controls Map
+        const KEYS = {
+            AARIV_LEFT: 'KeyA',
+            AARIV_RIGHT: 'KeyD',
+            AARIV_UP: 'KeyW',
+            AARIV_DOWN: 'KeyS',
+            AARIV_JUMP: 'Space',
+
+            LIPIKA_LEFT: 'ArrowLeft',
+            LIPIKA_RIGHT: 'ArrowRight',
+            LIPIKA_UP: 'ArrowUp',
+            LIPIKA_DOWN: 'ArrowDown',
+            LIPIKA_JUMP: 'Enter',
+            LIPIKA_JUMP_ALT: 'ShiftRight'
+        };
+
+        /* --- CHARACTER CREATION (LOW POLY PRIMITIVES) --- */
+        function createAdventurerMesh(colorHex, accentHex) {
+            const group = new THREE.Group();
+
+            // Materials
+            const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.5 });
+            const accentMat = new THREE.MeshStandardMaterial({ color: accentHex, roughness: 0.3 });
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.8 });
+
+            // Torso
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.5), bodyMat);
+            torso.position.y = 1.0;
+            torso.castShadow = true;
+            group.add(torso);
+
+            // Head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
+            head.position.y = 1.75;
+            head.castShadow = true;
+            group.add(head);
+
+            // Hair/Headband
+            const headband = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.15, 0.52), accentMat);
+            headband.position.y = 1.85;
+            group.add(headband);
+
+            // Arms (L/R)
+            const armGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);
+            const leftArm = new THREE.Mesh(armGeo, accentMat);
+            leftArm.position.set(-0.55, 1.0, 0);
+            const rightArm = new THREE.Mesh(armGeo, accentMat);
+            rightArm.position.set(0.55, 1.0, 0);
+            group.add(leftArm);
+            group.add(rightArm);
+
+            // Legs (L/R)
+            const legGeo = new THREE.BoxGeometry(0.3, 0.9, 0.3);
+            const leftLeg = new THREE.Mesh(legGeo, bodyMat);
+            leftLeg.position.set(-0.25, 0.45, 0);
+            const rightLeg = new THREE.Mesh(legGeo, bodyMat);
+            rightLeg.position.set(0.25, 0.45, 0);
+            group.add(leftLeg);
+            group.add(rightLeg);
+
+            // Store references for limb animations
+            group.userData = {
+                leftArm, rightArm, leftLeg, rightLeg,
+                animTimer: 0,
+                hp: 100,
+                vy: 0,
+                isGrounded: true,
+                radius: 0.5
+            };
+
+            return group;
+        }
+
+        /* --- INITIALIZATION & THREE.JS SCENE SETUP --- */
+        function initScene() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0305);
+            scene.fog = new THREE.FogExp2(0x1a0808, 0.025);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 6, -10);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.BasicShadowMap;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xff7744, 0.8);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffaa55, 1.2);
+            dirLight.position.set(10, 20, -10);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            // Create Characters
+            aariv = createAdventurerMesh(0x2563eb, 0x38bdf8); // Blue theme
+            lipika = createAdventurerMesh(0xd97706, 0xef4444); // Red/Gold theme
+
+            aariv.position.set(-2, 0, 0);
+            lipika.position.set(2, 0, 0);
+
+            scene.add(aariv);
+            scene.add(lipika);
+
+            // Build Initial Corridor Segments
+            for (let i = 0; i < 8; i++) {
+                spawnCorridorSegment(i * 30);
+            }
+
+            // Window Resize Listener
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        /* --- ENVIRONMENT PROCEDURAL GENERATION --- */
+        function spawnCorridorSegment(zOffset) {
+            const segmentGroup = new THREE.Group();
+            segmentGroup.position.z = zOffset;
+
+            // Floor Material
+            const floorMat = new THREE.MeshStandardMaterial({ 
+                color: 0x2d2327, 
+                roughness: 0.8 
+            });
+            const pillarMat = new THREE.MeshStandardMaterial({ 
+                color: 0x4a3b32, 
+                roughness: 0.9 
+            });
+
+            // Main Track Floor
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(CORRIDOR_WIDTH, 1, 30), floorMat);
+            floor.position.set(0, -0.5, 15);
+            floor.receiveShadow = true;
+            segmentGroup.add(floor);
+
+            // Lava Void beneath floor gaps
+            const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+            const lava = new THREE.Mesh(new THREE.PlaneGeometry(CORRIDOR_WIDTH * 2, 30), lavaMat);
+            lava.rotation.x = -Math.PI / 2;
+            lava.position.set(0, -4, 15);
+            segmentGroup.add(lava);
+
+            // Side Pillars & Walls
+            for (let z = 2; z < 30; z += 8) {
+                // Left Pillar
+                const leftPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 10, 6), pillarMat);
+                leftPillar.position.set(-CORRIDOR_WIDTH / 2 - 1, 5, z);
+                leftPillar.castShadow = true;
+                segmentGroup.add(leftPillar);
+
+                // Right Pillar
+                const rightPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 10, 6), pillarMat);
+                rightPillar.position.set(CORRIDOR_WIDTH / 2 + 1, 5, z);
+                rightPillar.castShadow = true;
+                segmentGroup.add(rightPillar);
+            }
+
+            scene.add(segmentGroup);
+            templeSegments.push(segmentGroup);
+        }
+
+        /* --- OBSTACLES & HAZARDS SPANWING --- */
+        function spawnDynamicHazards(currentZ) {
+            // Random chance to spawn falling pillar hazard ahead
+            if (Math.random() < 0.45) {
+                const spawnZ = currentZ + 40 + Math.random() * 20;
+                const spawnX = (Math.random() - 0.5) * (CORRIDOR_WIDTH - 3);
+
+                // Shadow Indicator on floor
+                const targetGeo = new THREE.RingGeometry(0.2, 1.8, 16);
+                const targetMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+                const targetIndicator = new THREE.Mesh(targetGeo, targetMat);
+                targetIndicator.rotation.x = -Math.PI / 2;
+                targetIndicator.position.set(spawnX, 0.02, spawnZ);
+                scene.add(targetIndicator);
+
+                // Falling Pillar Object
+                const pillarMat = new THREE.MeshStandardMaterial({ color: 0x615249 });
+                const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 8, 8), pillarMat);
+                pillar.position.set(spawnX, 25, spawnZ); // Starts high up
+                pillar.rotation.z = (Math.random() - 0.5) * 0.3;
+                pillar.castShadow = true;
+
+                pillar.userData = {
+                    type: 'falling_pillar',
+                    targetZ: spawnZ,
+                    targetX: spawnX,
+                    indicator: targetIndicator,
+                    vy: 0,
+                    active: true,
+                    radius: 1.5
+                };
+
+                scene.add(pillar);
+                activeObstacles.push(pillar);
+            }
+
+            // Random Floor Trap (Crumbling red tiles)
+            if (Math.random() < 0.35) {
+                const trapZ = currentZ + 35 + Math.random() * 15;
+                const trapX = (Math.floor(Math.random() * 3) - 1) * 4; // 3 lanes
+
+                const trapMat = new THREE.MeshStandardMaterial({ color: 0xd97706, emissive: 0xb91c1c });
+                const trapTile = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.2, 5), trapMat);
+                trapTile.position.set(trapX, 0.05, trapZ);
+                
+                trapTile.userData = {
+                    type: 'crumble_tile',
+                    active: true,
+                    triggered: false,
+                    fallTimer: 0,
+                    radius: 1.8
+                };
+
+                scene.add(trapTile);
+                activeObstacles.push(trapTile);
+            }
+        }
+
+        /* --- SPAWN ESCAPE PORTAL AT END --- */
+        function spawnPortal(zPos) {
+            const portalGroup = new THREE.Group();
+            portalGroup.position.set(0, 2, zPos);
+
+            const ringGeo = new THREE.TorusGeometry(3, 0.4, 16, 32);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            portalGroup.add(ring);
+
+            const light = new THREE.PointLight(0x38bdf8, 3, 20);
+            portalGroup.add(light);
+
+            portalEntity = portalGroup;
+            scene.add(portalGroup);
+        }
+
+        /* --- PARTICLE EFFECTS --- */
+        function createExplosionEffect(x, y, z) {
+            audio.playExplosion();
+            const pCount = 12;
+            const pGeo = new THREE.DodecahedronGeometry(0.3);
+            
+            for (let i = 0; i < pCount; i++) {
+                const pMat = new THREE.MeshBasicMaterial({ 
+                    color: Math.random() > 0.5 ? 0xef4444 : 0xf59e0b 
+                });
+                const p = new THREE.Mesh(pGeo, pMat);
+                p.position.set(x, y, z);
+                
+                p.userData = {
+                    vx: (Math.random() - 0.5) * 0.4,
+                    vy: Math.random() * 0.4 + 0.1,
+                    vz: (Math.random() - 0.5) * 0.4,
+                    life: 1.0
+                };
+
+                scene.add(p);
+                particles.push(p);
+            }
+        }
+
+        /* --- INPUT EVENT LISTENERS --- */
+        window.addEventListener('keydown', (e) => {
+            keyState[e.code] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keyState[e.code] = false;
+        });
+
+        function handlePlayerControls(character, controls) {
+            if (!isPlaying || isGameOver) return;
+
+            const speed = 0.18;
+            const uData = character.userData;
+
+            // Lateral Movement (X-axis)
+            if (keyState[controls.LEFT] && character.position.x > -CORRIDOR_WIDTH / 2 + 1) {
+                character.position.x -= speed;
+            }
+            if (keyState[controls.RIGHT] && character.position.x < CORRIDOR_WIDTH / 2 - 1) {
+                character.position.x += speed;
+            }
+
+            // Forward/Backward Adjustments (Z-axis relative)
+            if (keyState[controls.UP]) {
+                character.position.z += speed * 0.5;
+            }
+            if (keyState[controls.DOWN]) {
+                character.position.z -= speed * 0.5;
+            }
+
+            // Jump Handling
+            if ((keyState[controls.JUMP] || (controls.JUMP_ALT && keyState[controls.JUMP_ALT])) && uData.isGrounded) {
+                uData.vy = 0.28;
+                uData.isGrounded = false;
+                audio.playJump();
+            }
+
+            // Gravity & Vertical Physics
+            uData.vy -= 0.015; // Gravity acceleration
+            character.position.y += uData.vy;
+
+            // Ground Collision
+            if (character.position.y <= 0) {
+                character.position.y = 0;
+                uData.vy = 0;
+                uData.isGrounded = true;
+            }
+
+            // Limb Running Animations
+            uData.animTimer += 0.25;
+            const swing = Math.sin(uData.animTimer) * 0.6;
+            uData.leftArm.rotation.x = swing;
+            uData.rightArm.rotation.x = -swing;
+            uData.leftLeg.rotation.x = -swing;
+            uData.rightLeg.rotation.x = swing;
+        }
+
+        /* --- COLLISION & GAME STATE UPDATE --- */
+        function updateGame() {
+            if (!isPlaying || isGameOver) return;
+
+            // Auto-forward progression (Temple collapse pressure)
+            aariv.position.z += BASE_FORWARD_SPEED;
+            lipika.position.z += BASE_FORWARD_SPEED;
+
+            // Track main progress along Z
+            const leadZ = Math.max(aariv.position.z, lipika.position.z);
+            distanceCovered = Math.floor(leadZ);
+
+            // Update UI HUD
+            document.getElementById('distance-val').innerText = distanceCovered;
+            const progressPercent = Math.min(100, (distanceCovered / ESCAPE_TARGET) * 100);
+            document.getElementById('progress-bar').style.width = progressPercent + '%';
+
+            // Camera follow both players smoothly
+            const avgX = (aariv.position.x + lipika.position.x) / 2;
+            const avgZ = (aariv.position.z + lipika.position.z) / 2;
+
+            camera.position.x += (avgX - camera.position.x) * 0.08;
+            camera.position.z += ((avgZ - 8) - camera.position.z) * 0.1;
+            camera.position.y = 6;
+            camera.lookAt(avgX, 1.5, avgZ + 6);
+
+            // Player Specific Input Processing
+            handlePlayerControls(aariv, {
+                LEFT: KEYS.AARIV_LEFT,
+                RIGHT: KEYS.AARIV_RIGHT,
+                UP: KEYS.AARIV_UP,
+                DOWN: KEYS.AARIV_DOWN,
+                JUMP: KEYS.AARIV_JUMP
+            });
+
+            handlePlayerControls(lipika, {
+                LEFT: KEYS.LIPIKA_LEFT,
+                RIGHT: KEYS.LIPIKA_RIGHT,
+                UP: KEYS.LIPIKA_UP,
+                DOWN: KEYS.LIPIKA_DOWN,
+                JUMP: KEYS.LIPIKA_JUMP,
+                JUMP_ALT: KEYS.LIPIKA_JUMP_ALT
+            });
+
+            // Dynamically Spawn Corridors & Hazards Ahead
+            const highestSegmentZ = templeSegments[templeSegments.length - 1].position.z;
+            if (leadZ + 90 > highestSegmentZ) {
+                spawnCorridorSegment(highestSegmentZ + 30);
+                if (highestSegmentZ < ESCAPE_TARGET) {
+                    spawnDynamicHazards(highestSegmentZ);
+                }
+            }
+
+            // Spawn Exit Portal near finish line
+            if (distanceCovered >= ESCAPE_TARGET - 30 && !portalEntity) {
+                spawnPortal(ESCAPE_TARGET);
+            }
+
+            // Update Dynamic Hazards & Collisions
+            for (let i = activeObstacles.length - 1; i >= 0; i--) {
+                const obs = activeObstacles[i];
+                if (!obs.userData.active) continue;
+
+                // 1. Falling Pillar Physics
+                if (obs.userData.type === 'falling_pillar') {
+                    if (obs.position.y > 0) {
+                        obs.userData.vy -= 0.02;
+                        obs.position.y += obs.userData.vy;
+
+                        // Warning Indicator pulse scaling
+                        if (obs.userData.indicator) {
+                            const scale = 1 + Math.sin(Date.now() * 0.02) * 0.2;
+                            obs.userData.indicator.scale.set(scale, scale, 1);
+                        }
+                    } else {
+                        // Pillar hit the ground!
+                        obs.position.y = 0;
+                        if (obs.userData.indicator) {
+                            scene.remove(obs.userData.indicator);
+                            obs.userData.indicator = null;
+                        }
+
+                        // Create Explosion Debris & Sound
+                        createExplosionEffect(obs.position.x, 0.5, obs.position.z);
+                        triggerScreenShake();
+                        audio.playImpact();
+                    }
+                }
+
+                // 2. Crumble Tile Hazard Physics
+                if (obs.userData.type === 'crumble_tile') {
+                    // Check if player stepped on tile
+                    [aariv, lipika].forEach(char => {
+                        const dx = char.position.x - obs.position.x;
+                        const dz = char.position.z - obs.position.z;
+                        if (Math.abs(dx) < 1.8 && Math.abs(dz) < 2.5 && char.position.y <= 0.2) {
+                            obs.userData.triggered = true;
+                        }
+                    });
+
+                    if (obs.userData.triggered) {
+                        obs.userData.fallTimer += 0.05;
+                        obs.material.emissive.setHex(0xff0000);
+                        if (obs.userData.fallTimer > 1.0) {
+                            obs.position.y -= 0.3; // Tile falls into lava
+                        }
+                    }
+                }
+
+                // Check Character Damage Collisions
+                [aariv, lipika].forEach((char, charIdx) => {
+                    const distSq = Math.pow(char.position.x - obs.position.x, 2) + Math.pow(char.position.z - obs.position.z, 2);
+                    const hitDist = (obs.userData.radius || 1.0) + char.userData.radius;
+
+                    if (distSq < hitDist * hitDist && Math.abs(char.position.y - obs.position.y) < 2.0) {
+                        // Take Damage
+                        applyDamage(char, charIdx === 0 ? 'aariv' : 'lipika', 15);
+                        
+                        // Push character back
+                        char.position.z -= 1.5;
+                        createExplosionEffect(char.position.x, char.position.y + 1, char.position.z);
+                    }
+                });
+
+                // Clean up old distant hazards behind players
+                if (obs.position.z < leadZ - 20) {
+                    scene.remove(obs);
+                    activeObstacles.splice(i, 1);
+                }
+            }
+
+            // Update Particle Animations
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.x += p.userData.vx;
+                p.position.y += p.userData.vy;
+                p.position.z += p.userData.vz;
+                p.userData.life -= 0.04;
+                p.scale.multiplyScalar(0.92);
+
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Check Falling into Pit/Lava Death Condition
+            [aariv, lipika].forEach((char, idx) => {
+                if (char.position.y < -3) {
+                    applyDamage(char, idx === 0 ? 'aariv' : 'lipika', 100);
+                }
+            });
+
+            // Check Escape Portal Victory Condition
+            if (portalEntity && (aariv.position.z >= ESCAPE_TARGET || lipika.position.z >= ESCAPE_TARGET)) {
+                triggerVictory();
+            }
+        }
+
+        /* --- DAMAGE & HEALTH SYSTEM --- */
+        function applyDamage(char, playerKey, amount) {
+            char.userData.hp = Math.max(0, char.userData.hp - amount);
+
+            // Update HUD UI
+            const barEl = document.getElementById(`${playerKey}-hp-bar`);
+            const textEl = document.getElementById(`${playerKey}-hp-text`);
+            if (barEl && textEl) {
+                barEl.style.width = char.userData.hp + '%';
+                textEl.innerText = Math.ceil(char.userData.hp) + '%';
+            }
+
+            // Screen Shake & Red flash banner
+            triggerScreenShake();
+            showWarningAlert("HAZARD DAMAGE TAKEN!");
+
+            // Check Game Over
+            if (aariv.userData.hp <= 0 && lipika.userData.hp <= 0) {
+                triggerGameOver("Both Aariv and Lipika perished in the ruins!");
+            }
+        }
+
+        /* --- UI & GAME OVER MODALS --- */
+        function triggerScreenShake() {
+            document.body.classList.add('shake');
+            setTimeout(() => document.body.classList.remove('shake'), 300);
+        }
+
+        function showWarningAlert(text) {
+            const banner = document.getElementById('alert-banner');
+            banner.innerText = text;
+            banner.style.opacity = '1';
+            setTimeout(() => { banner.style.opacity = '0'; }, 1500);
+        }
+
+        function triggerGameOver(reason) {
+            isGameOver = true;
+            isPlaying = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            document.getElementById('game-over-desc').innerText = reason;
+            document.getElementById('final-distance').innerText = distanceCovered + 'm';
+            audio.playImpact();
+        }
+
+        function triggerVictory() {
+            isGameOver = true;
+            isPlaying = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('victory-screen').classList.remove('hidden');
+            audio.playVictory();
+        }
+
+        /* --- GAME RESET & RESTART LOGIC --- */
+        function resetGame() {
+            // Reset state
+            isPlaying = true;
+            isGameOver = false;
+            distanceCovered = 0;
+
+            // Reset Characters
+            aariv.position.set(-2, 0, 0);
+            lipika.position.set(2, 0, 0);
+            aariv.userData.hp = 100;
+            lipika.userData.hp = 100;
+
+            // Reset HUD
+            document.getElementById('aariv-hp-bar').style.width = '100%';
+            document.getElementById('aariv-hp-text').innerText = '100%';
+            document.getElementById('lipika-hp-bar').style.width = '100%';
+            document.getElementById('lipika-hp-text').innerText = '100%';
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('distance-val').innerText = '0';
+
+            // Clear Obstacles & Particles
+            activeObstacles.forEach(obs => scene.remove(obs));
+            particles.forEach(p => scene.remove(p));
+            if (portalEntity) scene.remove(portalEntity);
+
+            activeObstacles = [];
+            particles = [];
+            portalEntity = null;
+
+            // Hide Overlays
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('victory-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+        }
+
+        /* --- RESIZE & RENDER LOOP --- */
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateGame();
+            renderer.render(scene, camera);
+        }
+
+        /* --- INITIALIZATION BINDINGS --- */
+        window.onload = () => {
+            initScene();
+            animate();
+
+            // Button Click Handlers
+            document.getElementById('btn-start').addEventListener('click', () => {
+                audio.init();
+                resetGame();
+            });
+
+            document.getElementById('btn-restart').addEventListener('click', () => {
+                resetGame();
+            });
+
+            document.getElementById('btn-victory-restart').addEventListener('click', () => {
+                resetGame();
+            });
+        };
+    </script>
+</body>
+</html>
